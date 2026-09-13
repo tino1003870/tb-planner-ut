@@ -1,0 +1,15 @@
+{
+    "name": "tb-planner.com.tino",
+    "description": "checks working caldav syncronization",
+    "architecture": "$ENV{ARCH}",
+    "title": "TB Planner",
+    "hooks": {
+        "tb-planner": {
+            "apparmor": "tb-planner.apparmor",
+            "desktop":  "tb-planner.desktop"
+        }
+    },
+    "version": "1.0.0",
+    "maintainer": "Tino Schurzmann <schurzmann@gmail.com>",
+    "framework" : "$ENV{CLICK_FRAMEWORK}"
+}
