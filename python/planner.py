@@ -5,6 +5,7 @@ from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 import json
 import sys
+import uuid
 
 from caldav.client import CalDAVClient
 from caldav.ical import PlannerTask, parse_vtodo, task_to_vtodo
@@ -297,6 +298,121 @@ def main_cli():
             response = {
                 "success": True,
                 "uid": uid,
+            }
+
+        elif operation == "sync":
+
+            local_tasks = request.get("tasks", [])
+
+            # Aktuellen Serverstand lesen.
+            server_tasks = planner.list_tasks()
+
+            server_by_uid = {
+                task.uid: task
+                for task in server_tasks
+            }
+
+            # Für die Hierarchie:
+            # level -> nächster Task dieser Ebene.
+            parents = []
+
+            results = []
+
+            # Die Reihenfolge der übergebenen Liste ist
+            # die gewünschte Reihenfolge im Planner.
+            counters = []
+
+            for index, local in enumerate(local_tasks):
+
+                title = local.get("summary", "").strip()
+                level = int(local.get("level", 0))
+                uid = local.get("uid", "")
+
+                if not title:
+                    continue
+
+                if level < 0:
+                    level = 0
+
+                # WBS erzeugen.
+                while len(counters) <= level:
+                    counters.append(0)
+
+                counters[level] += 1
+
+                for i in range(level + 1, len(counters)):
+                    counters[i] = 0
+
+                wbs = ".".join(
+                    str(x)
+                    for x in counters[:level + 1]
+                )
+
+                # Parent = letzter Task eine Ebene höher.
+                parent = None
+
+                if level > 0 and level - 1 < len(parents):
+                    parent = parents[level - 1]
+
+                if len(parents) <= level:
+                    parents.extend(
+                        [None] * (level + 1 - len(parents))
+                    )
+
+                parents[level] = uid or None
+                parents = parents[:level + 1]
+
+                if uid and uid in server_by_uid:
+
+                    # Bestehenden Server-Task laden und nur
+                    # Planner-relevante Felder ändern.
+                    task = server_by_uid[uid]
+
+                    task.summary = title
+                    task.wbs = wbs
+                    task.parent = parent
+                    task.order = index
+
+                    planner.update_task(task)
+
+                    results.append({
+                        "success": True,
+                        "uid": uid,
+                        "created": False,
+                        "wbs": wbs,
+                        "parent": parent,
+                        "order": index,
+                    })
+
+                else:
+
+                    # Neuer lokaler Task.
+                    new_uid = uid or str(uuid.uuid4())
+
+                    task = PlannerTask(
+                        uid=new_uid,
+                        summary=title,
+                        status="NEEDS-ACTION",
+                        percent_complete=0,
+                        wbs=wbs,
+                        parent=parent,
+                        order=index,
+                    )
+
+                    planner.create_task(task)
+
+                    results.append({
+                        "success": True,
+                        "uid": new_uid,
+                        "created": True,
+                        "wbs": wbs,
+                        "parent": parent,
+                        "order": index,
+                    })
+
+            response = {
+                "success": True,
+                "results": results,
             }
 
         else:

@@ -5,6 +5,26 @@ import QtQuick.Layouts 1.3
 MainView {
     id: root
 
+    property bool taskSyncRunning: false
+
+    Component.onCompleted: {
+        var settings = syncManager.loadConnectionSettings()
+
+        urlField.text = settings.url
+        usernameField.text = settings.username
+        passwordField.text = ""
+    }
+
+    Connections {
+        target: syncManager
+
+        onTaskSyncFinished: {
+            outputText.text += "\n[DEBUG] taskSyncFinished empfangen\n"
+            root.taskSyncRunning = false
+        }
+    }
+
+
     objectName: "mainView"
     applicationName: "tb-planner.com.tino"
 
@@ -55,7 +75,8 @@ MainView {
                     visible: root.page === 0
 
                     Item {
-                        width: parent.width
+
+width: parent.width
                         height: units.gu(4)
                     }
 
@@ -181,10 +202,16 @@ MainView {
                         text: "Einstellungen laden"
 
                         onClicked: {
+                            var settings =
+                                syncManager.loadConnectionSettings()
+
+                            urlField.text = settings.url
+                            usernameField.text = settings.username
+                            passwordField.text = ""
+
                             outputText.text =
-                                "Laden der Verbindungseinstellungen\n"
-                                + "URL und Benutzername.\n"
-                                + "Passwort wird nicht gespeichert."
+                                "Verbindungseinstellungen geladen.\n"
+                                + "Passwort muss erneut eingegeben werden."
                         }
                     }
 
@@ -195,10 +222,10 @@ MainView {
                         text: "Einstellungen speichern"
 
                         onClicked: {
-                            outputText.text =
-                                "Speichern der Verbindungseinstellungen\n"
-                                + "URL und Benutzername.\n"
-                                + "Passwort wird nicht gespeichert."
+                            syncManager.saveConnectionSettings(
+                                urlField.text,
+                                usernameField.text
+                            )
                         }
                     }
 
@@ -226,7 +253,7 @@ MainView {
                         }
                     }
 
-                    Button {
+                                        Button {
                         width: parent.width
                         height: units.gu(5)
 
@@ -279,6 +306,8 @@ MainView {
 
                         text: "Aufgabe hinzufügen"
 
+                        enabled: !root.taskSyncRunning
+
                         onClicked: {
                             root.page = 3
                         }
@@ -306,6 +335,8 @@ MainView {
 
                             model: taskModel
 
+                            currentIndex: -1
+
                             clip: true
 
                             boundsBehavior: Flickable.StopAtBounds
@@ -313,6 +344,17 @@ MainView {
                             delegate: Item {
                                 width: taskList.width
                                 height: units.gu(5)
+
+                                MouseArea {
+                                    id: taskSelectArea
+                                    anchors.fill: parent
+                                    z: -1
+
+                                    onClicked: {
+                                        taskList.currentIndex = index
+                                        selectedTaskTitle.text = title
+                                    }
+                                }
 
                                 Row {
                                     x: 0
@@ -357,11 +399,31 @@ MainView {
                                             Text.AlignRight
                                     }
 
+                                    Label {
+                                        width: units.gu(7)
+
+                                        height: parent.height
+
+                                        text: synced ? "sync'd" : "unsynced"
+
+                                        verticalAlignment:
+                                            Text.AlignVCenter
+
+                                        horizontalAlignment:
+                                            Text.AlignRight
+
+                                        color: synced ? "green" : "red"
+
+                                        font.pixelSize: units.dp(11)
+                                    }
+
                                     Button {
                                         width: units.gu(5)
                                         height: units.gu(4)
 
                                         text: "×"
+
+                                        enabled: !root.taskSyncRunning
 
                                         onClicked:
                                             taskModel.removeTask(index)
@@ -379,16 +441,160 @@ MainView {
                         }
                     }
 
+/* =====================================================
+                       TASK-BEARBEITUNG
+                       ===================================================== */
+
+                    Label {
+                        width: parent.width
+
+                        text: "Ausgewählter Task"
+
+                        font.pixelSize: units.gu(2)
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: units.gu(5)
+
+                        spacing: units.gu(1)
+
+                        TextField {
+                            id: selectedTaskTitle
+
+                            enabled: !root.taskSyncRunning
+
+                            width: parent.width - units.gu(11)
+                            height: units.gu(5)
+
+                            placeholderText: "Task auswählen"
+                        }
+
+                        Button {
+                            width: units.gu(10)
+                            height: units.gu(5)
+
+                            text: "Übernehmen"
+
+                                        enabled: !root.taskSyncRunning
+
+                            onClicked: {
+                                if (taskList.currentIndex >= 0) {
+                                    taskModel.setTaskTitle(
+                                        taskList.currentIndex,
+                                        selectedTaskTitle.text
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: units.gu(5)
+
+                        spacing: units.gu(1)
+
+                        Button {
+                            width: (parent.width - units.gu(4)) / 5
+                            height: units.gu(5)
+
+                            text: "↑"
+
+                                        enabled: !root.taskSyncRunning
+
+                            onClicked: {
+                                if (taskList.currentIndex >= 0)
+                                    taskModel.moveTaskUp(
+                                        taskList.currentIndex
+                                    )
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - units.gu(4)) / 5
+                            height: units.gu(5)
+
+                            text: "↓"
+
+                                        enabled: !root.taskSyncRunning
+
+                            onClicked: {
+                                if (taskList.currentIndex >= 0)
+                                    taskModel.moveTaskDown(
+                                        taskList.currentIndex
+                                    )
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - units.gu(4)) / 5
+                            height: units.gu(5)
+
+                            text: "←"
+
+                                        enabled: !root.taskSyncRunning
+
+                            onClicked: {
+                                if (taskList.currentIndex >= 0)
+                                    taskModel.outdentTask(
+                                        taskList.currentIndex
+                                    )
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - units.gu(4)) / 5
+                            height: units.gu(5)
+
+                            text: "→"
+
+                                        enabled: !root.taskSyncRunning
+
+                            onClicked: {
+                                if (taskList.currentIndex >= 0)
+                                    taskModel.indentTask(
+                                        taskList.currentIndex
+                                    )
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - units.gu(4)) / 5
+                            height: units.gu(5)
+
+                            text: "×"
+
+                            onClicked: {
+                                if (taskList.currentIndex >= 0) {
+                                    taskModel.removeTask(
+                                        taskList.currentIndex
+                                    )
+                                    selectedTaskTitle.text = ""
+                                }
+                            }
+                        }
+                    }
+
+
                     Button {
                         width: parent.width
                         height: units.gu(5)
 
                         text: "Synchronisieren"
 
-                        onClicked: {
-                            outputText.text = ""
+                        enabled: !root.taskSyncRunning
 
-                            syncManager.syncBoth()
+                        onClicked: {
+                            
+                            root.taskSyncRunning = true
+outputText.text = ""
+
+                            syncManager.syncTasks(
+                                urlField.text,
+                                usernameField.text,
+                                passwordField.text
+                            )
                         }
                     }
 
@@ -579,4 +785,42 @@ MainView {
             })
         }
     }
+
+    
+    // =========================================================
+    // SYNC-SPERRE FÜR DIE TASK-SEITE
+    // =========================================================
+    Rectangle {
+        id: taskSyncOverlay
+
+        anchors.fill: parent
+
+        visible: root.page === 2 && root.taskSyncRunning
+
+        color: "white"
+        opacity: 0.65
+
+        z: 1000
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: taskSyncOverlay.visible
+
+            onClicked: {
+                // Absichtlich keine Aktion.
+                // Die komplette Task-Seite bleibt während
+                // des Syncs gesperrt.
+            }
+        }
+
+        Label {
+            anchors.centerIn: parent
+
+            text: "Synchronisiere ..."
+            font.pixelSize: units.gu(2.2)
+
+            opacity: 1.0
+        }
+    }
+
 }
