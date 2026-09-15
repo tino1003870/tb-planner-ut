@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tb-planner.com.tino\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-13 16:05+0000\n"
+"POT-Creation-Date: 2026-09-15 05:11+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,30 +17,6 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: ../qml/Main.qml:19 tb-planner.desktop.in.h:1
+#: tb-planner.desktop.in.h:1
 msgid "TB Planner"
-msgstr ""
-
-#: ../qml/Main.qml:37
-msgid "CalDAV-Synchronisation"
-msgstr ""
-
-#: ../qml/Main.qml:43
-msgid "GMX synchronisieren"
-msgstr ""
-
-#: ../qml/Main.qml:53
-msgid "WEB.DE synchronisieren"
-msgstr ""
-
-#: ../qml/Main.qml:63
-msgid "Beide synchronisieren"
-msgstr ""
-
-#: ../qml/Main.qml:73
-msgid "Ausgabe"
-msgstr ""
-
-#: ../qml/Main.qml:106
-msgid "Noch keine Synchronisation gestartet."
 msgstr ""

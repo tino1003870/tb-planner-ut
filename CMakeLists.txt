@@ -73,3 +73,9 @@ file(GLOB_RECURSE PROJECT_SRC_FILES
 
 add_custom_target(${PROJECT_NAME}_FILES ALL SOURCES ${PROJECT_SRC_FILES})
 
+# Python application files
+install(
+    DIRECTORY ${CMAKE_SOURCE_DIR}/python/
+    DESTINATION python
+)
+
