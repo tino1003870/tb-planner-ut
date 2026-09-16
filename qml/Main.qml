@@ -1,28 +1,70 @@
 import QtQuick 2.7
 import Lomiri.Components 1.3
 import QtQuick.Layouts 1.3
+import io.thp.pyotherside 1.5
 
 MainView {
     id: root
 
     property bool taskSyncRunning: false
 
-    Component.onCompleted: {
-        var settings = syncManager.loadConnectionSettings()
-
-        urlField.text = settings.url
-        usernameField.text = settings.username
-        passwordField.text = ""
+    ListModel {
+        id: pythonTaskModel
     }
 
-    Connections {
-        target: syncManager
+    function refreshPythonTaskModel() {
+        python.call(
+            "backend.getTasks",
+            [],
+            function(tasks) {
+                pythonTaskModel.clear()
 
-        onTaskSyncFinished: {
-            outputText.text += "\n[DEBUG] taskSyncFinished empfangen\n"
-            root.taskSyncRunning = false
+                if (!tasks)
+                    return
+
+                for (var i = 0; i < tasks.length; ++i)
+                    pythonTaskModel.append(tasks[i])
+            }
+        )
+    }
+
+    Python {
+        id: python
+
+        Component.onCompleted: {
+            console.log("Python-Test: PyOtherSide geladen")
+
+            python.addImportPath("python")
+
+            python.importModule("backend", function() {
+                console.log("Python-Modul backend geladen")
+            })
+        }
+
+        onError: {
+            console.log("Python-Fehler:", traceback)
+        }
+
+        onReceived: {
+            console.log("Python-Antwort:", data)
         }
     }
+
+    Component.onCompleted: {
+        python.call(
+            "backend.loadConnectionSettings",
+            [],
+            function(settings) {
+                if (!settings)
+                    return
+
+                urlField.text = settings.url
+                usernameField.text = settings.username
+                passwordField.text = ""
+            }
+        )
+    }
+
 
 
     objectName: "mainView"
@@ -202,16 +244,22 @@ width: parent.width
                         text: "Einstellungen laden"
 
                         onClicked: {
-                            var settings =
-                                syncManager.loadConnectionSettings()
+                            python.call(
+                                "backend.loadConnectionSettings",
+                                [],
+                                function(settings) {
+                                    if (!settings)
+                                        return
 
-                            urlField.text = settings.url
-                            usernameField.text = settings.username
-                            passwordField.text = ""
+                                    urlField.text = settings.url
+                                    usernameField.text = settings.username
+                                    passwordField.text = ""
 
-                            outputText.text =
-                                "Verbindungseinstellungen geladen.\n"
-                                + "Passwort muss erneut eingegeben werden."
+                                    outputText.text =
+                                        "Verbindungseinstellungen geladen.\n"
+                                        + "Passwort muss erneut eingegeben werden."
+                                }
+                            )
                         }
                     }
 
@@ -222,9 +270,16 @@ width: parent.width
                         text: "Einstellungen speichern"
 
                         onClicked: {
-                            syncManager.saveConnectionSettings(
-                                urlField.text,
-                                usernameField.text
+                            python.call(
+                                "backend.saveConnectionSettings",
+                                [
+                                    urlField.text,
+                                    usernameField.text
+                                ],
+                                function(result) {
+                                    if (result && result.message)
+                                        outputText.text = result.message
+                                }
                             )
                         }
                     }
@@ -242,14 +297,34 @@ width: parent.width
 
                         onClicked: {
                             outputText.text = ""
-                            taskModel.clear()
+                            pythonTaskModel.clear()
 
-                            syncManager.loadWebDeTasks(
-                                usernameField.text,
-                                passwordField.text
+                            python.call(
+                                "backend.loadWebDeTasks",
+                                [
+                                    urlField.text,
+                                    usernameField.text,
+                                    passwordField.text
+                                ],
+                                function(result) {
+                                    if (!result) {
+                                        outputText.text =
+                                            "Python: Keine Daten erhalten."
+                                        return
+                                    }
+
+                                    for (var i = 0; i < result.length; ++i) {
+                                        pythonTaskModel.append(result[i])
+                                    }
+
+                                    outputText.text =
+                                        "Python: " +
+                                        result.length +
+                                        " VTODOs geladen."
+
+                                    root.page = 2
+                                }
                             )
-
-                            root.page = 2
                         }
                     }
 
@@ -261,8 +336,35 @@ width: parent.width
 
                         onClicked: {
                             outputText.text = ""
+                            root.taskSyncRunning = true
 
-                            syncManager.syncBoth()
+                            python.call(
+                                "backend.syncTasks",
+                                [
+                                    urlField.text,
+                                    usernameField.text,
+                                    passwordField.text
+                                ],
+                                function(result) {
+                                    if (!result || !result.success) {
+                                        outputText.text =
+                                            "Synchronisation fehlgeschlagen.\n" +
+                                            (result && result.error
+                                                ? result.error
+                                                : "Keine Daten erhalten.")
+                                        root.taskSyncRunning = false
+                                        return
+                                    }
+
+                                    outputText.text =
+                                        "Synchronisation abgeschlossen.\n" +
+                                        "Tasks: " +
+                                        result.results.length
+
+                                    root.refreshPythonTaskModel()
+                                    root.taskSyncRunning = false
+                                }
+                            )
                         }
                     }
 
@@ -333,7 +435,7 @@ width: parent.width
                             width: parent.width - units.gu(2)
                             height: parent.height - units.gu(2)
 
-                            model: taskModel
+                            model: pythonTaskModel
 
                             currentIndex: -1
 
@@ -426,7 +528,9 @@ width: parent.width
                                         enabled: !root.taskSyncRunning
 
                                         onClicked:
-                                            taskModel.removeTask(index)
+                                            python.call("backend.removeTask", [index], function() {
+                                                root.refreshPythonTaskModel()
+                                            })
                                     }
                                 }
                             }
@@ -480,9 +584,15 @@ width: parent.width
 
                             onClicked: {
                                 if (taskList.currentIndex >= 0) {
-                                    taskModel.setTaskTitle(
-                                        taskList.currentIndex,
-                                        selectedTaskTitle.text
+                                    python.call(
+                                        "backend.setTaskTitle",
+                                        [
+                                            taskList.currentIndex,
+                                            selectedTaskTitle.text
+                                        ],
+                                        function() {
+                                            root.refreshPythonTaskModel()
+                                        }
                                     )
                                 }
                             }
@@ -505,8 +615,12 @@ width: parent.width
 
                             onClicked: {
                                 if (taskList.currentIndex >= 0)
-                                    taskModel.moveTaskUp(
-                                        taskList.currentIndex
+                                    python.call(
+                                        "backend.moveTaskUp",
+                                        [taskList.currentIndex],
+                                        function() {
+                                            root.refreshPythonTaskModel()
+                                        }
                                     )
                             }
                         }
@@ -521,8 +635,12 @@ width: parent.width
 
                             onClicked: {
                                 if (taskList.currentIndex >= 0)
-                                    taskModel.moveTaskDown(
-                                        taskList.currentIndex
+                                    python.call(
+                                        "backend.moveTaskDown",
+                                        [taskList.currentIndex],
+                                        function() {
+                                            root.refreshPythonTaskModel()
+                                        }
                                     )
                             }
                         }
@@ -537,8 +655,12 @@ width: parent.width
 
                             onClicked: {
                                 if (taskList.currentIndex >= 0)
-                                    taskModel.outdentTask(
-                                        taskList.currentIndex
+                                    python.call(
+                                        "backend.outdentTask",
+                                        [taskList.currentIndex],
+                                        function() {
+                                            root.refreshPythonTaskModel()
+                                        }
                                     )
                             }
                         }
@@ -553,8 +675,12 @@ width: parent.width
 
                             onClicked: {
                                 if (taskList.currentIndex >= 0)
-                                    taskModel.indentTask(
-                                        taskList.currentIndex
+                                    python.call(
+                                        "backend.indentTask",
+                                        [taskList.currentIndex],
+                                        function() {
+                                            root.refreshPythonTaskModel()
+                                        }
                                     )
                             }
                         }
@@ -567,10 +693,15 @@ width: parent.width
 
                             onClicked: {
                                 if (taskList.currentIndex >= 0) {
-                                    taskModel.removeTask(
-                                        taskList.currentIndex
+                                    python.call(
+                                        "backend.removeTask",
+                                        [taskList.currentIndex],
+                                        function() {
+                                            selectedTaskTitle.text = ""
+                                            taskList.currentIndex = -1
+                                            root.refreshPythonTaskModel()
+                                        }
                                     )
-                                    selectedTaskTitle.text = ""
                                 }
                             }
                         }
@@ -590,10 +721,32 @@ width: parent.width
                             root.taskSyncRunning = true
 outputText.text = ""
 
-                            syncManager.syncTasks(
-                                urlField.text,
-                                usernameField.text,
-                                passwordField.text
+                            python.call(
+                                "backend.syncTasks",
+                                [
+                                    urlField.text,
+                                    usernameField.text,
+                                    passwordField.text
+                                ],
+                                function(result) {
+                                    if (!result || !result.success) {
+                                        outputText.text =
+                                            "Python-Sync-Fehler: " +
+                                            (result
+                                             ? result.error
+                                             : "Keine Antwort")
+                                        root.taskSyncRunning = false
+                                        return
+                                    }
+
+                                    outputText.text =
+                                        "Synchronisation abgeschlossen.\n" +
+                                        "Tasks: " +
+                                        result.results.length
+
+                                    root.refreshPythonTaskModel()
+                                    root.taskSyncRunning = false
+                                }
                             )
                         }
                     }
@@ -741,17 +894,22 @@ outputText.text = ""
                             if (isNaN(duration) || duration < 1)
                                 duration = 1
 
-                            taskModel.addTask(
-                                titleField.text,
-                                levelSelector.selectedIndex,
-                                duration
+                            python.call(
+                                "backend.addTask",
+                                [
+                                    titleField.text,
+                                    levelSelector.selectedIndex,
+                                    duration
+                                ],
+                                function() {
+                                    titleField.text = ""
+                                    durationField.text = "1"
+                                    levelSelector.selectedIndex = 0
+
+                                    root.refreshPythonTaskModel()
+                                    root.page = 2
+                                }
                             )
-
-                            titleField.text = ""
-                            durationField.text = "1"
-                            levelSelector.selectedIndex = 0
-
-                            root.page = 2
                         }
                     }
 
@@ -769,22 +927,6 @@ outputText.text = ""
     }
 
 
-    Connections {
-        target: syncManager
-
-        onOutputChanged: {
-            outputText.text += text
-
-            Qt.callLater(function() {
-                outputFlickable.contentY =
-                    Math.max(
-                        0,
-                        outputFlickable.contentHeight -
-                        outputFlickable.height
-                    )
-            })
-        }
-    }
 
     
     // =========================================================

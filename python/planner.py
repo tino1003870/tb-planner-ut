@@ -382,6 +382,7 @@ def main_cli():
                         "wbs": wbs,
                         "parent": parent,
                         "order": index,
+                        "level": level,
                     })
 
                 else:
@@ -408,6 +409,7 @@ def main_cli():
                         "wbs": wbs,
                         "parent": parent,
                         "order": index,
+                        "level": level,
                     })
 
             response = {

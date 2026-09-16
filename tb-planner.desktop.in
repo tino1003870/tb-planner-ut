@@ -1,6 +1,6 @@
 [Desktop Entry]
 _Name=TB Planner
-Exec=tb-planner %U
+Exec=qmlscene qml/Main.qml
 Icon=assets/logo.svg
 Terminal=false
 Type=Application
