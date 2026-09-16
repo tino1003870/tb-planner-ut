@@ -13,17 +13,61 @@ MainView {
     }
 
     function refreshPythonTaskModel() {
+        var selectedUid = ""
+
+        if (taskList.currentIndex >= 0 &&
+            taskList.currentIndex < pythonTaskModel.count) {
+
+            selectedUid =
+                pythonTaskModel.get(taskList.currentIndex).uid
+
+            console.log(
+                "REFRESH BEFORE:",
+                "index=", taskList.currentIndex,
+                "uid=", selectedUid
+            )
+        }
+
         python.call(
             "backend.getTasks",
             [],
             function(tasks) {
+
                 pythonTaskModel.clear()
 
-                if (!tasks)
+                if (!tasks) {
+                    taskList.currentIndex = -1
+                    console.log("REFRESH: keine Tasks")
                     return
+                }
 
                 for (var i = 0; i < tasks.length; ++i)
                     pythonTaskModel.append(tasks[i])
+
+                var newIndex = -1
+
+                if (selectedUid !== "") {
+                    for (var j = 0;
+                         j < pythonTaskModel.count;
+                         ++j) {
+
+                        var refreshedTask =
+                            pythonTaskModel.get(j)
+
+                        if (refreshedTask.uid === selectedUid) {
+                            newIndex = j
+                            break
+                        }
+                    }
+                }
+
+                taskList.currentIndex = newIndex
+
+                console.log(
+                    "REFRESH AFTER:",
+                    "selectedUid=", selectedUid,
+                    "newIndex=", newIndex
+                )
             }
         )
     }
@@ -293,11 +337,27 @@ width: parent.width
                         width: parent.width
                         height: units.gu(5)
 
-                        text: "VTODOs aus web.de lesen"
+                        text: "VTODOs lesen"
+
+                        enabled: !root.taskSyncRunning
 
                         onClicked: {
+                            console.log(
+                                "[DEBUG] VTODO-Laden gestartet"
+                            )
+
                             outputText.text = ""
                             pythonTaskModel.clear()
+
+                            root.taskSyncRunning = true
+
+                            // Sofort zur Taskliste wechseln,
+                            // damit das Sync-Overlay sichtbar wird.
+                            root.page = 2
+
+                            console.log(
+                                "[DEBUG] VTODO-Laden: Taskseite geöffnet"
+                            )
 
                             python.call(
                                 "backend.loadWebDeTasks",
@@ -307,9 +367,20 @@ width: parent.width
                                     passwordField.text
                                 ],
                                 function(result) {
+                                    console.log(
+                                        "[DEBUG] VTODO-Laden abgeschlossen"
+                                    )
+
                                     if (!result) {
                                         outputText.text =
                                             "Python: Keine Daten erhalten."
+
+                                        root.taskSyncRunning = false
+
+                                        console.log(
+                                            "[DEBUG] VTODO-Laden: keine Daten"
+                                        )
+
                                         return
                                     }
 
@@ -322,7 +393,12 @@ width: parent.width
                                         result.length +
                                         " VTODOs geladen."
 
-                                    root.page = 2
+                                    root.taskSyncRunning = false
+
+                                    console.log(
+                                        "[DEBUG] VTODO-Laden: Overlay beendet, Tasks=",
+                                        result.length
+                                    )
                                 }
                             )
                         }
@@ -614,14 +690,35 @@ width: parent.width
                                         enabled: !root.taskSyncRunning
 
                             onClicked: {
-                                if (taskList.currentIndex >= 0)
+                                if (taskList.currentIndex >= 0) {
+                                    var oldIndex = taskList.currentIndex
+                                    var task = pythonTaskModel.get(oldIndex)
+
+                                    console.log(
+                                        "MOVE UP BEFORE:",
+                                        "index=", oldIndex,
+                                        "uid=", task.uid,
+                                        "title=", task.title
+                                    )
+
                                     python.call(
                                         "backend.moveTaskUp",
-                                        [taskList.currentIndex],
-                                        function() {
+                                        [oldIndex],
+                                        function(result) {
+                                            console.log(
+                                                "MOVE UP PYTHON RESULT:",
+                                                JSON.stringify(result)
+                                            )
+
                                             root.refreshPythonTaskModel()
+
+                                            console.log(
+                                                "MOVE UP AFTER REFRESH:",
+                                                "currentIndex=", taskList.currentIndex
+                                            )
                                         }
                                     )
+                                }
                             }
                         }
 
@@ -634,14 +731,35 @@ width: parent.width
                                         enabled: !root.taskSyncRunning
 
                             onClicked: {
-                                if (taskList.currentIndex >= 0)
+                                if (taskList.currentIndex >= 0) {
+                                    var oldIndex = taskList.currentIndex
+                                    var task = pythonTaskModel.get(oldIndex)
+
+                                    console.log(
+                                        "MOVE DOWN BEFORE:",
+                                        "index=", oldIndex,
+                                        "uid=", task.uid,
+                                        "title=", task.title
+                                    )
+
                                     python.call(
                                         "backend.moveTaskDown",
-                                        [taskList.currentIndex],
-                                        function() {
+                                        [oldIndex],
+                                        function(result) {
+                                            console.log(
+                                                "MOVE DOWN PYTHON RESULT:",
+                                                JSON.stringify(result)
+                                            )
+
                                             root.refreshPythonTaskModel()
+
+                                            console.log(
+                                                "MOVE DOWN AFTER REFRESH:",
+                                                "currentIndex=", taskList.currentIndex
+                                            )
                                         }
                                     )
+                                }
                             }
                         }
 

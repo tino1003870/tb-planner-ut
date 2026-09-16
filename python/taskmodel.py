@@ -65,27 +65,107 @@ class TaskModel:
         task.title = trimmed
         task.synced = False
 
+    def _updateOrder(self):
+        for index, task in enumerate(self.tasks):
+            task.order = index
+
     def moveTaskUp(self, index):
+        print(
+            "TaskModel.moveTaskUp:",
+            "index=", index,
+            "count=", len(self.tasks),
+            flush=True
+        )
+
         if index <= 0 or index >= len(self.tasks):
+            print(
+                "TaskModel.moveTaskUp: ungültiger Index",
+                flush=True
+            )
             return
+
+        task = self.tasks[index]
+        previous = self.tasks[index - 1]
+
+        print(
+            "TaskModel.moveTaskUp BEFORE:",
+            "task=", repr(task.title),
+            "order=", task.order,
+            "previous=", repr(previous.title),
+            "previous_order=", previous.order,
+            flush=True
+        )
 
         self.tasks[index], self.tasks[index - 1] = (
             self.tasks[index - 1],
             self.tasks[index]
         )
 
+        # order entspricht immer der aktuellen Listenposition.
+        self.tasks[index - 1].order = index - 1
+        self.tasks[index].order = index
+
         self.markAllUnsynced()
 
+        print(
+            "TaskModel.moveTaskUp AFTER:",
+            "task=", repr(self.tasks[index - 1].title),
+            "index=", index - 1,
+            "order=", self.tasks[index - 1].order,
+            "next=", repr(self.tasks[index].title),
+            "index=", index,
+            "order=", self.tasks[index].order,
+            flush=True
+        )
+
     def moveTaskDown(self, index):
+        print(
+            "TaskModel.moveTaskDown:",
+            "index=", index,
+            "count=", len(self.tasks),
+            flush=True
+        )
+
         if index < 0 or index >= len(self.tasks) - 1:
+            print(
+                "TaskModel.moveTaskDown: ungültiger Index",
+                flush=True
+            )
             return
+
+        task = self.tasks[index]
+        following = self.tasks[index + 1]
+
+        print(
+            "TaskModel.moveTaskDown BEFORE:",
+            "task=", repr(task.title),
+            "order=", task.order,
+            "following=", repr(following.title),
+            "following_order=", following.order,
+            flush=True
+        )
 
         self.tasks[index], self.tasks[index + 1] = (
             self.tasks[index + 1],
             self.tasks[index]
         )
 
+        # order entspricht immer der aktuellen Listenposition.
+        self.tasks[index].order = index
+        self.tasks[index + 1].order = index + 1
+
         self.markAllUnsynced()
+
+        print(
+            "TaskModel.moveTaskDown AFTER:",
+            "task=", repr(self.tasks[index].title),
+            "index=", index,
+            "order=", self.tasks[index].order,
+            "next=", repr(self.tasks[index + 1].title),
+            "index=", index + 1,
+            "order=", self.tasks[index + 1].order,
+            flush=True
+        )
 
     def indentTask(self, index):
         print(
@@ -209,9 +289,33 @@ class TaskModel:
             task.synced = True
 
     def taskArray(self):
+        # Die physische Reihenfolge der Liste ist die maßgebliche
+        # Reihenfolge der Tasks.
+        #
+        # order wird deshalb bei jeder Ausgabe aus der aktuellen
+        # Listenposition neu aufgebaut.
+        self._updateOrder()
+
         result = []
 
-        for task in self.tasks:
+        print(
+            "TaskModel.taskArray:",
+            "count=", len(self.tasks),
+            flush=True
+        )
+
+        for index, task in enumerate(self.tasks):
+            print(
+                "TaskModel.taskArray:",
+                index,
+                repr(task.title),
+                "uid=", task.uid,
+                "level=", task.level,
+                "order=", task.order,
+                "synced=", task.synced,
+                flush=True
+            )
+
             result.append({
                 "uid": task.uid,
                 "summary": task.title,
@@ -220,7 +324,7 @@ class TaskModel:
                 "synced": task.synced,
                 "wbs": task.wbs,
                 "parent": task.parent,
-                "order": task.order
+                "order": index
             })
 
         return result

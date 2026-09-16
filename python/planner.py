@@ -118,6 +118,34 @@ class Planner:
                 # Ressource enthält keine gültige VTODO.
                 continue
 
+        # Web.de liefert VTODOs nicht zwingend in der
+        # vom TB-Planner gespeicherten Reihenfolge.
+        # Deshalb explizit nach X-TB-PLANNER-ORDER sortieren.
+        print(
+            "Planner.list_tasks: Web.de-Reihenfolge:",
+            [
+                (task.order, task.summary, task.uid)
+                for task in tasks
+            ],
+            flush=True
+        )
+
+        tasks.sort(
+            key=lambda task: (
+                task.order is None,
+                task.order if task.order is not None else 0
+            )
+        )
+
+        print(
+            "Planner.list_tasks: sortierte Reihenfolge:",
+            [
+                (task.order, task.summary, task.uid)
+                for task in tasks
+            ],
+            flush=True
+        )
+
         return tasks
 
     def create_task(self, task):
