@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, asdict
 import json
+import uuid
 
 
 @dataclass
@@ -14,6 +15,8 @@ class Task:
     wbs: str = ""
     parent: str = ""
     order: int = -1
+    dtstart: str = None
+    due: str = None
 
 
 class TaskModel:
@@ -30,10 +33,16 @@ class TaskModel:
         uid="",
         wbs="",
         parent="",
-        order=-1
+        order=-1,
+        dtstart=None,
+        due=None
     ):
         if not title.strip():
             return
+
+        # Jeder neue Task bekommt sofort eine stabile UID.
+        if not uid:
+            uid = str(uuid.uuid4())
 
         self.tasks.append(
             Task(
@@ -44,7 +53,9 @@ class TaskModel:
                 synced=synced,
                 wbs=wbs,
                 parent=parent,
-                order=order
+                order=order,
+                dtstart=dtstart,
+                due=due
             )
         )
 
@@ -321,10 +332,14 @@ class TaskModel:
                 "summary": task.title,
                 "level": task.level,
                 "duration": task.duration,
+                "dtstart": getattr(task, "dtstart", None),
+                "due": getattr(task, "due", None),
                 "synced": task.synced,
                 "wbs": task.wbs,
                 "parent": task.parent,
-                "order": index
+                "order": index,
+                "dtstart": task.dtstart,
+                "due": task.due
             })
 
         return result

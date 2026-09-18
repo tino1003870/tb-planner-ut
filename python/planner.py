@@ -101,6 +101,13 @@ class Planner:
             )
 
             try:
+                print(
+                    "Planner.list_tasks: GET:",
+                    repr(task_url),
+                    file=sys.stderr,
+                    flush=True
+                )
+
                 get_status, _, ics_data = self.client.get(
                     task_url
                 )
@@ -127,6 +134,7 @@ class Planner:
                 (task.order, task.summary, task.uid)
                 for task in tasks
             ],
+            file=sys.stderr,
             flush=True
         )
 
@@ -143,6 +151,7 @@ class Planner:
                 (task.order, task.summary, task.uid)
                 for task in tasks
             ],
+            file=sys.stderr,
             flush=True
         )
 

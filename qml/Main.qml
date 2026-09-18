@@ -6,27 +6,23 @@ import io.thp.pyotherside 1.5
 MainView {
     id: root
 
+    property int ganttModelRevision: 0
+
     property bool taskSyncRunning: false
+    property string selectedTaskUid: ""
 
     ListModel {
         id: pythonTaskModel
     }
 
     function refreshPythonTaskModel() {
-        var selectedUid = ""
+        var selectedUid = root.selectedTaskUid
 
-        if (taskList.currentIndex >= 0 &&
-            taskList.currentIndex < pythonTaskModel.count) {
-
-            selectedUid =
-                pythonTaskModel.get(taskList.currentIndex).uid
-
-            console.log(
-                "REFRESH BEFORE:",
-                "index=", taskList.currentIndex,
-                "uid=", selectedUid
-            )
-        }
+        console.log(
+            "REFRESH BEFORE:",
+            "index=", taskList.currentIndex,
+            "uid=", selectedUid
+        )
 
         python.call(
             "backend.getTasks",
@@ -43,6 +39,13 @@ MainView {
 
                 for (var i = 0; i < tasks.length; ++i)
                     pythonTaskModel.append(tasks[i])
+
+                root.ganttModelRevision++
+
+                console.log(
+                    "GANTT MODEL REVISION:",
+                    root.ganttModelRevision
+                )
 
                 var newIndex = -1
 
@@ -67,6 +70,17 @@ MainView {
                     "REFRESH AFTER:",
                     "selectedUid=", selectedUid,
                     "newIndex=", newIndex
+                )
+
+                console.log(
+                    "[GANTT STATE AFTER REFRESH]",
+                    "count=", pythonTaskModel.count,
+                    "startDate=", ganttContent.startDate,
+                    "endDate=", ganttContent.endDate,
+                    "ganttDays=", ganttContent.ganttDays,
+                    "pixelsPerDay=", ganttContent.pixelsPerDay,
+                    "width=", ganttContent.width,
+                    "height=", ganttContent.height
                 )
             }
         )
@@ -530,7 +544,15 @@ width: parent.width
 
                                     onClicked: {
                                         taskList.currentIndex = index
+                                        root.selectedTaskUid = uid
                                         selectedTaskTitle.text = title
+
+                                        console.log(
+                                            "TASK SELECTED:",
+                                            "index=", index,
+                                            "uid=", uid,
+                                            "title=", title
+                                        )
                                     }
                                 }
 
@@ -619,6 +641,24 @@ width: parent.width
                                 text: "Noch keine Aufgaben."
                             }
                         }
+                    }
+
+                    Button {
+                        width: parent.width
+                        height: units.gu(5)
+
+                        text: "Gantt-Diagramm"
+
+                        enabled: !root.taskSyncRunning
+
+                        onClicked: {
+                            root.page = 4
+                        }
+                    }
+
+                    Item {
+                        width: parent.width
+                        height: units.gu(1)
                     }
 
 /* =====================================================
@@ -816,6 +856,7 @@ width: parent.width
                                         [taskList.currentIndex],
                                         function() {
                                             selectedTaskTitle.text = ""
+                                            root.selectedTaskUid = ""
                                             taskList.currentIndex = -1
                                             root.refreshPythonTaskModel()
                                         }
@@ -936,6 +977,626 @@ outputText.text = ""
                    AUFGABE ANLEGEN
                    ===================================================== */
 
+                /* =====================================================
+                   GANTT-DIAGRAMM
+                   ===================================================== */
+
+                Column {
+                    id: ganttPage
+
+                    width: parent.width
+                    spacing: units.gu(1)
+
+                    visible: root.page === 4
+
+                    property real pixelsPerDay: 35
+
+                    function dateValue(text) {
+                        if (!text || text.length !== 8)
+                            return null
+
+                        var y = parseInt(text.substring(0, 4))
+                        var m = parseInt(text.substring(4, 6)) - 1
+                        var d = parseInt(text.substring(6, 8))
+
+                        return new Date(y, m, d)
+                    }
+
+                    function minDate() {
+                        var result = null
+
+                        for (var i = 0; i < pythonTaskModel.count; ++i) {
+                            var t = pythonTaskModel.get(i)
+                            var d = dateValue(t.dtstart)
+
+                            if (d && (!result || d < result))
+                                result = d
+                        }
+
+                        return result
+                    }
+
+                    function maxDate() {
+                        var result = null
+
+                        for (var i = 0; i < pythonTaskModel.count; ++i) {
+                            var t = pythonTaskModel.get(i)
+                            var d = dateValue(t.due)
+
+                            if (d && (!result || d > result))
+                                result = d
+                        }
+
+                        return result
+                    }
+
+                    function dayDiff(a, b) {
+                        return Math.round(
+                            (b.getTime() - a.getTime()) /
+                            (24 * 60 * 60 * 1000)
+                        )
+                    }
+
+                    function formatDate(d) {
+                        if (!d)
+                            return ""
+
+                        var day = d.getDate()
+                        var month = d.getMonth() + 1
+
+                        return (
+                            (day < 10 ? "0" : "") + day +
+                            "." +
+                            (month < 10 ? "0" : "") + month
+                        )
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: "Gantt-Diagramm"
+                        font.pixelSize: units.gu(2.5)
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: units.gu(1)
+
+                        Button {
+                            width: (parent.width - 4 * units.gu(1)) / 5
+                            height: units.gu(4)
+                            text: "−"
+
+                            onClicked: {
+                                ganttContent.pixelsPerDay =
+                                    Math.max(
+                                        10,
+                                        ganttContent.pixelsPerDay - 5
+                                    )
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - 4 * units.gu(1)) / 5
+                            height: units.gu(4)
+                            text: "Woche"
+
+                            onClicked: {
+                                ganttContent.pixelsPerDay = 20
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - 4 * units.gu(1)) / 5
+                            height: units.gu(4)
+                            text: "Tag"
+
+                            onClicked: {
+                                ganttContent.pixelsPerDay = 35
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - 4 * units.gu(1)) / 5
+                            height: units.gu(4)
+                            text: "+"
+
+                            onClicked: {
+                                ganttContent.pixelsPerDay =
+                                    Math.min(
+                                        100,
+                                        ganttContent.pixelsPerDay + 5
+                                    )
+                            }
+                        }
+
+                        Button {
+                            width: (parent.width - 4 * units.gu(1)) / 5
+                            height: units.gu(4)
+                            text: "Zurück"
+
+                            onClicked: {
+                                root.page = 2
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: units.gu(45)
+
+                        border.color: "gray"
+                        border.width: 1
+                        color: "transparent"
+
+                        clip: true
+
+                        Flickable {
+                            id: ganttFlickable
+
+                            anchors.fill: parent
+
+                            contentWidth:
+                                Math.max(
+                                    width,
+                                    ganttContent.width
+                                )
+
+                            contentHeight:
+                                Math.max(
+                                    height,
+                                    ganttContent.height
+                                )
+
+                            flickableDirection:
+                                Flickable.HorizontalAndVerticalFlick
+
+                            boundsBehavior:
+                                Flickable.StopAtBounds
+
+                            Item {
+                                id: ganttContent
+
+                                property real pixelsPerDay: 35
+
+                            function dateValue(value) {
+                                if (!value)
+                                    return null
+
+                                var s = String(value)
+
+                                if (s.length === 8) {
+                                    var y = parseInt(s.substring(0, 4))
+                                    var m = parseInt(s.substring(4, 6)) - 1
+                                    var d = parseInt(s.substring(6, 8))
+                                    return new Date(y, m, d)
+                                }
+
+                                var result = new Date(s)
+                                return isNaN(result.getTime()) ? null : result
+                            }
+
+                            function calculateMinDate() {
+                                var result = null
+
+                                for (var i = 0;
+                                     i < pythonTaskModel.count;
+                                     ++i) {
+
+                                    var t = pythonTaskModel.get(i)
+                                    var d = dateValue(t.dtstart)
+
+                                    if (d && (!result || d < result))
+                                        result = d
+                                }
+
+                                return result
+                            }
+
+                            function calculateMaxDate() {
+                                var result = null
+
+                                for (var i = 0;
+                                     i < pythonTaskModel.count;
+                                     ++i) {
+
+                                    var t = pythonTaskModel.get(i)
+                                    var d = dateValue(t.due)
+
+                                    if (d && (!result || d > result))
+                                        result = d
+                                }
+
+                                return result
+                            }
+
+                            function dayDiff(a, b) {
+                                if (!a || !b)
+                                    return 0
+
+                                return Math.round(
+                                    (b.getTime() - a.getTime()) /
+                                    (24 * 60 * 60 * 1000)
+                                )
+                            }
+
+                            function formatDate(d) {
+                                if (!d)
+                                    return ""
+
+                                var day = d.getDate()
+                                var month = d.getMonth() + 1
+
+                                return (
+                                    (day < 10 ? "0" : "") + day +
+                                    "." +
+                                    (month < 10 ? "0" : "") + month
+                                )
+                            }
+
+
+                                width: Math.max(
+                                    ganttFlickable.width,
+                                    ganttContent.labelWidth +
+                                    ganttContent.pixelsPerDay *
+                                    ganttContent.ganttDays
+                                )
+
+                                height:
+                                    units.gu(7) +
+                                    pythonTaskModel.count *
+                                    units.gu(5)
+
+                                /*
+                                 * Die Datumswerte hängen ausdrücklich von
+                                 * pythonTaskModel.count ab. Dadurch wird die
+                                 * Berechnung auch nach einem kompletten
+                                 * Model-Refresh erneut ausgeführt.
+                                 */
+
+                                property var startDate:
+                                    root.ganttModelRevision >= 0 &&
+                                    pythonTaskModel.count > 0
+                                    ? calculateMinDate()
+                                    : null
+
+                                property var endDate:
+                                    root.ganttModelRevision >= 0 &&
+                                    pythonTaskModel.count > 0
+                                    ? calculateMaxDate()
+                                    : null
+
+                                property int ganttDays:
+                                    startDate && endDate
+                                    ? parentColumn.dayDiff(
+                                          startDate,
+                                          endDate
+                                      ) + 1
+                                    : 1
+
+                                property real labelWidth:
+                                    units.gu(18)
+
+                                Column {
+                                    id: parentColumn
+                                    objectName: "ganttParentColumn"
+
+                                    visible: false
+
+                                    property real pixelsPerDay:
+                                        ganttPage.pixelsPerDay
+
+                                    function minDate() {
+                                        return ganttContent.minDate()
+                                    }
+
+                                    function maxDate() {
+                                        return ganttContent.maxDate()
+                                    }
+
+                                    function dayDiff(a, b) {
+                                        return ganttContent.dayDiff(a, b)
+                                    }
+                                }
+
+                                Rectangle {
+                                    x: 0
+                                    y: 0
+                                    width: ganttContent.labelWidth
+                                    height: ganttContent.height
+
+                                    color: "transparent"
+
+                                    border.color: "#cccccc"
+                                    border.width: 1
+                                }
+
+                                Row {
+                                    x: ganttContent.labelWidth
+                                    y: 0
+
+                                    Repeater {
+                                        model: ganttContent.ganttDays
+
+                                        delegate: Rectangle {
+                                            width:
+                                                ganttContent.pixelsPerDay
+
+                                            height: units.gu(7)
+
+                                            color: "transparent"
+
+                                            border.color: "#dddddd"
+                                            border.width: 1
+
+                                            Label {
+                                                anchors.centerIn: parent
+
+                                                text: {
+                                                    if (!ganttContent.startDate)
+                                                        return ""
+
+                                                    var d =
+                                                        new Date(
+                                                            ganttContent.startDate
+                                                        )
+
+                                                    d.setDate(
+                                                        d.getDate() + index
+                                                    )
+
+                                                    return ganttContent.formatDate(d)
+                                                }
+
+                                                font.pixelSize:
+                                                    units.gu(1.2)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: pythonTaskModel
+
+                                    delegate: Item {
+                                        width: ganttContent.width
+                                        height: units.gu(5)
+
+                                        y:
+                                            units.gu(7) +
+                                            index * units.gu(5)
+
+                                        Label {
+                                            x: 0
+                                            y: 0
+
+                                            width:
+                                                ganttContent.labelWidth -
+                                                units.gu(1)
+
+                                            height: parent.height
+
+                                            verticalAlignment:
+                                                Text.AlignVCenter
+
+                                            elide:
+                                                Text.ElideRight
+
+                                            text: {
+                                                var t =
+                                                    pythonTaskModel.get(index)
+
+                                                var indent =
+                                                    ""
+
+                                                for (
+                                                    var n = 0;
+                                                    n < t.level;
+                                                    ++n
+                                                )
+                                                    indent += "    "
+
+                                                return (
+                                                    indent +
+                                                    (t.wbs
+                                                     ? t.wbs + " "
+                                                     : "") +
+                                                    t.title
+                                                )
+                                            }
+
+                                            font.pixelSize:
+                                                units.gu(1.6)
+                                        }
+
+                                        Rectangle {
+                                            x: ganttContent.labelWidth
+                                            y: 0
+
+                                            width:
+                                                ganttContent.ganttDays *
+                                                ganttContent.pixelsPerDay
+
+                                            height: parent.height
+
+                                            color: "transparent"
+
+                                            border.color: "#eeeeee"
+                                            border.width: 1
+                                        }
+
+                                        Rectangle {
+                                            id: taskBar
+
+                                            y: units.gu(1)
+
+                                            height: units.gu(3)
+
+                                            color: "#607D8B"
+                                            z: 10
+
+                                            visible: {
+                                                var t =
+                                                    pythonTaskModel.get(index)
+
+                                                return !!(
+                                                    ganttContent.startDate &&
+                                                    t.dtstart &&
+                                                    t.due
+                                                )
+                                            }
+
+                                            x: {
+                                                var t =
+                                                    pythonTaskModel.get(index)
+
+                                                if (
+                                                    !ganttContent.startDate ||
+                                                    !t.dtstart
+                                                )
+                                                    return 0
+
+                                                var d =
+                                                    ganttContent.dateValue(
+                                                        String(t.dtstart)
+                                                    )
+
+                                                if (!d)
+                                                    return 0
+
+                                                var result =
+                                                    ganttContent.labelWidth +
+                                                    ganttContent.dayDiff(
+                                                        ganttContent.startDate,
+                                                        d
+                                                    ) *
+                                                    ganttContent.pixelsPerDay
+
+                                                console.log(
+                                                    "[GANTT BAR]",
+                                                    index,
+                                                    t.title,
+                                                    "x=", result
+                                                )
+
+                                                return result
+                                            }
+
+                                            width: {
+                                                var t =
+                                                    pythonTaskModel.get(index)
+
+                                                if (!t || !t.dtstart || !t.due)
+                                                    return 0
+
+                                                var a =
+                                                    ganttContent.dateValue(
+                                                        String(t.dtstart)
+                                                    )
+
+                                                var b =
+                                                    ganttContent.dateValue(
+                                                        String(t.due)
+                                                    )
+
+                                                if (!a || !b)
+                                                    return 0
+
+                                                var days =
+                                                    ganttContent.dayDiff(a, b)
+
+                                                var result = Math.max(
+                                                    ganttContent.pixelsPerDay,
+                                                    (days + 1) *
+                                                    ganttContent.pixelsPerDay
+                                                )
+
+                                                console.log(
+                                                    "[GANTT BAR]",
+                                                    index,
+                                                    t.title,
+                                                    "width=", result,
+                                                    "days=", days
+                                                )
+
+                                                return result
+                                            }
+
+                                            radius: units.gu(0.5)
+
+                                            border.color: "black"
+                                            border.width: 1
+
+                                            Component.onCompleted: {
+                                                var t = pythonTaskModel.get(index)
+
+                                                console.log(
+                                                    "[GANTT]",
+                                                    "count=", pythonTaskModel.count,
+                                                    "start=", ganttContent.startDate,
+                                                    "end=", ganttContent.endDate,
+                                                    "ppd=", ganttContent.pixelsPerDay,
+                                                    "task=", t.title,
+                                                    "dtstart=", t.dtstart,
+                                                    "due=", t.due
+                                                )
+                                            }
+
+                                            Text {
+                                                anchors.fill: parent
+                                                anchors.leftMargin:
+                                                    units.gu(0.5)
+                                                anchors.rightMargin:
+                                                    units.gu(0.5)
+
+                                                verticalAlignment:
+                                                    Text.AlignVCenter
+
+                                                elide:
+                                                    Text.ElideRight
+
+                                                text: {
+                                                    var t =
+                                                        pythonTaskModel.get(
+                                                            index
+                                                        )
+
+                                                    return t.title
+                                                }
+
+                                                font.pixelSize:
+                                                    units.gu(1.3)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Label {
+                        width: parent.width
+
+                        text: {
+                            if (pythonTaskModel.count === 0)
+                                return "Keine Tasks."
+
+                            if (!ganttContent.startDate)
+                                return "Keine Datumsdaten vorhanden."
+
+                            return (
+                                "Zeitraum: " +
+                                ganttContent.formatDate(
+                                    ganttContent.startDate
+                                ) +
+                                " – " +
+                                ganttContent.formatDate(
+                                    ganttContent.endDate
+                                )
+                            )
+                        }
+                    }
+                }
+
                 Column {
                     width: parent.width
                     spacing: units.gu(1)
@@ -1012,14 +1673,60 @@ outputText.text = ""
                             if (isNaN(duration) || duration < 1)
                                 duration = 1
 
+                            var projectMin = ganttPage.minDate()
+
+                            if (!projectMin) {
+                                console.log(
+                                    "NEW TASK: Kein Projektminimum vorhanden"
+                                )
+
+                                outputText.text =
+                                    "Aufgabe kann nicht angelegt werden: " +
+                                    "kein Projektminimum vorhanden."
+
+                                return
+                            }
+
+                            var dueDate =
+                                new Date(projectMin.getTime())
+
+                            dueDate.setDate(
+                                dueDate.getDate() + duration - 1
+                            )
+
+                            function formatTaskDate(d) {
+                                return (
+                                    d.getFullYear() +
+                                    String(d.getMonth() + 1).padStart(2, "0") +
+                                    String(d.getDate()).padStart(2, "0")
+                                )
+                            }
+
+                            var dtstart =
+                                formatTaskDate(projectMin)
+
+                            var due =
+                                formatTaskDate(dueDate)
+
+                            console.log(
+                                "NEW TASK:",
+                                "title=", titleField.text,
+                                "level=", levelSelector.selectedIndex,
+                                "duration=", duration,
+                                "dtstart=", dtstart,
+                                "due=", due
+                            )
+
                             python.call(
                                 "backend.addTask",
                                 [
                                     titleField.text,
                                     levelSelector.selectedIndex,
-                                    duration
+                                    duration,
+                                    dtstart,
+                                    due
                                 ],
-                                function() {
+                                function(result) {
                                     titleField.text = ""
                                     durationField.text = "1"
                                     levelSelector.selectedIndex = 0

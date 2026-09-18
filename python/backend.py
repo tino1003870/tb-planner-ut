@@ -23,10 +23,12 @@ class PlannerBackend:
 
     def addTask(self, title, level, duration,
                 synced=False, uid="", wbs="",
-                parent="", order=-1):
+                parent="", order=-1,
+                dtstart=None, due=None):
         self.taskModel.addTask(
             title, level, duration,
-            synced, uid, wbs, parent, order
+            synced, uid, wbs, parent, order,
+            dtstart, due
         )
 
     def setTaskTitle(self, index, title):
@@ -243,6 +245,7 @@ def getTasks():
     for task in tasks:
         result.append({
             "title": task.get("title", task.get("summary", "")),
+            "summary": task.get("summary", task.get("title", "")),
             "level": task.get("level", 0),
             "duration": task.get("duration", 1),
             "synced": task.get("synced", False),
@@ -252,11 +255,12 @@ def getTasks():
             "taskOrder": task.get(
                 "taskOrder",
                 task.get("order", -1)
-            )
+            ),
+            "dtstart": task.get("dtstart"),
+            "due": task.get("due")
         })
 
     return result
-
 
 def loadConnectionSettings():
     return _backend.loadConnectionSettings()
@@ -266,8 +270,14 @@ def saveConnectionSettings(url, username):
     return _backend.saveConnectionSettings(url, username)
 
 
-def addTask(title, level, duration):
-    _backend.addTask(title, level, duration)
+def addTask(title, level, duration, dtstart=None, due=None):
+    _backend.addTask(
+        title,
+        level,
+        duration,
+        dtstart=dtstart,
+        due=due
+    )
     return _backend.taskModel.taskArray()
 
 
@@ -350,8 +360,20 @@ def loadWebDeTasks(calendar_url, username, password):
             "uid": task.uid or "",
             "wbs": wbs,
             "parent": task.parent or "",
-            "taskOrder": task.order if task.order is not None else -1
+            "taskOrder": task.order if task.order is not None else -1,
+            "dtstart": task.dtstart or "",
+            "due": task.due or ""
         })
+
+        print(
+            "Python loadWebDeTasks TASK:",
+            "title=", repr(task.summary),
+            "dtstart=", repr(task.dtstart),
+            "due=", repr(task.due),
+            "wbs=", repr(wbs),
+            "order=", task.order,
+            flush=True
+        )
 
     print(
         "Python loadWebDeTasks: result ->",
@@ -380,7 +402,9 @@ def loadWebDeTasks(calendar_url, username, password):
             task.get("uid", ""),
             task.get("wbs", ""),
             task.get("parent", ""),
-            task.get("taskOrder", -1)
+            task.get("taskOrder", -1),
+            task.get("dtstart"),
+            task.get("due")
         )
 
     return result
