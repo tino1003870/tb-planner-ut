@@ -166,6 +166,24 @@ class Planner:
 
         ics = task_to_vtodo(task)
 
+        print(
+            "===== DEBUG UPDATE VTODO =====",
+            file=sys.stderr,
+            flush=True
+        )
+
+        print(
+            ics,
+            file=sys.stderr,
+            flush=True
+        )
+
+        print(
+            "===== END DEBUG UPDATE VTODO =====",
+            file=sys.stderr,
+            flush=True
+        )
+
         status, headers, data = self.client.put(
             url,
             ics,
@@ -185,17 +203,74 @@ class Planner:
 
         url = self._task_url(task.uid)
 
+        print(
+            "===== DEBUG UPDATE TASK =====",
+            file=sys.stderr,
+            flush=True
+        )
+
+        print(
+            "uid=", repr(task.uid),
+            "summary=", repr(task.summary),
+            "dtstart=", repr(task.dtstart),
+            "due=", repr(task.due),
+            "wbs=", repr(task.wbs),
+            "parent=", repr(task.parent),
+            "order=", repr(task.order),
+            file=sys.stderr,
+            flush=True
+        )
+
         ics = task_to_vtodo(task)
+
+        print(
+            "===== DEBUG GENERATED VTODO =====",
+            file=sys.stderr,
+            flush=True
+        )
+
+        print(
+            ics,
+            file=sys.stderr,
+            flush=True
+        )
+
+        print(
+            "===== END DEBUG GENERATED VTODO =====",
+            file=sys.stderr,
+            flush=True
+        )
+
+        print(
+            "DEBUG PUT URL:",
+            repr(url),
+            file=sys.stderr,
+            flush=True
+        )
 
         status, headers, data = self.client.put(
             url,
             ics,
         )
 
+        print(
+            "DEBUG PUT RESULT:",
+            "status=", status,
+            "response=", repr(data),
+            file=sys.stderr,
+            flush=True
+        )
+
         if status not in (200, 201, 204):
             raise RuntimeError(
                 f"UPDATE fehlgeschlagen: HTTP {status}"
             )
+
+        print(
+            "===== END DEBUG UPDATE TASK =====",
+            file=sys.stderr,
+            flush=True
+        )
 
         return task
 
@@ -341,6 +416,34 @@ def main_cli():
 
             local_tasks = request.get("tasks", [])
 
+            # Frühestes gültiges Startdatum der lokalen Tasks bestimmen.
+            # Dieses Datum dient als Ersatz, wenn der Server "0"
+            # oder kein gültiges Startdatum liefert.
+            from datetime import datetime
+
+            valid_local_dates = []
+
+            for local in local_tasks:
+                dtstart = local.get("dtstart")
+
+                if dtstart and dtstart != "0":
+                    try:
+                        datetime.strptime(dtstart, "%Y%m%d")
+                        valid_local_dates.append(dtstart)
+                    except (ValueError, TypeError):
+                        pass
+
+            minimum_date = min(valid_local_dates) if valid_local_dates else None
+
+            print(
+                "DEBUG SYNC MINIMUM DATE:",
+                repr(minimum_date),
+                "from",
+                valid_local_dates,
+                file=sys.stderr,
+                flush=True
+            )
+
             # Aktuellen Serverstand lesen.
             server_tasks = planner.list_tasks()
 
@@ -405,12 +508,71 @@ def main_cli():
                     # Planner-relevante Felder ändern.
                     task = server_by_uid[uid]
 
+                    print(
+                        "DEBUG SYNC EXISTING BEFORE:",
+                        "uid=", repr(uid),
+                        "title=", repr(task.summary),
+                        "server_dtstart=", repr(task.dtstart),
+                        "server_due=", repr(task.due),
+                        "local_duration=", repr(local.get("duration")),
+                        "local_dtstart=", repr(local.get("dtstart")),
+                        "local_due=", repr(local.get("due")),
+                        file=sys.stderr,
+                        flush=True
+                    )
+
                     task.summary = title
                     task.wbs = wbs
                     task.parent = parent
                     task.order = index
 
+                    # Startdatum vom lokalen Task übernehmen.
+                    local_dtstart = local.get("dtstart")
+
+                    if local_dtstart and local_dtstart != "0":
+                        task.dtstart = local_dtstart
+                    elif task.dtstart == "0" or not task.dtstart:
+                        # Server liefert kein gültiges Datum:
+                        # frühestes lokales Datum verwenden.
+                        task.dtstart = minimum_date
+
+                    # "0" auch bei DUE als ungültig behandeln.
+                    if task.due == "0":
+                        task.due = None
+
+                    if task.dtstart and local.get("duration"):
+                        from datetime import datetime, timedelta
+
+                        start_date = datetime.strptime(
+                            local["dtstart"], "%Y%m%d"
+                        )
+                        duration = max(1, int(local["duration"]))
+
+                        task.due = (
+                            start_date + timedelta(days=duration - 1)
+                        ).strftime("%Y%m%d")
+
+                    print(
+                        "DEBUG SYNC EXISTING AFTER:",
+                        "uid=", repr(uid),
+                        "title=", repr(task.summary),
+                        "server_dtstart=", repr(task.dtstart),
+                        "server_due=", repr(task.due),
+                        "local_duration=", repr(local.get("duration")),
+                        file=sys.stderr,
+                        flush=True
+                    )
+
                     planner.update_task(task)
+
+                    print(
+                        "DEBUG SYNC PUT DONE:",
+                        "uid=", repr(uid),
+                        "dtstart=", repr(task.dtstart),
+                        "due=", repr(task.due),
+                        file=sys.stderr,
+                        flush=True
+                    )
 
                     results.append({
                         "success": True,

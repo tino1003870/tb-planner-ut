@@ -76,6 +76,70 @@ class TaskModel:
         task.title = trimmed
         task.synced = False
 
+    def setTaskStartDate(self, index, dtstart):
+        if index < 0 or index >= len(self.tasks):
+            return
+
+        if not dtstart:
+            return
+
+        task = self.tasks[index]
+
+        try:
+            from datetime import datetime, timedelta
+
+            start = datetime.strptime(dtstart, "%Y%m%d")
+
+            duration = max(1, int(task.duration))
+
+            due = start + timedelta(days=duration - 1)
+
+            task.dtstart = start.strftime("%Y%m%d")
+            task.due = due.strftime("%Y%m%d")
+
+        except (ValueError, TypeError):
+            return
+
+        task.synced = False
+
+    def setTaskDuration(self, index, duration):
+        if index < 0 or index >= len(self.tasks):
+            return
+
+        try:
+            duration = int(duration)
+        except (TypeError, ValueError):
+            return
+
+        if duration < 1:
+            duration = 1
+
+        task = self.tasks[index]
+
+        if task.duration == duration:
+            return
+
+        task.duration = duration
+
+        # Bei geänderter Dauer das Enddatum neu berechnen.
+        if task.dtstart:
+            try:
+                from datetime import datetime, timedelta
+
+                start = datetime.strptime(
+                    task.dtstart,
+                    "%Y%m%d"
+                )
+
+                due = start + timedelta(days=duration - 1)
+
+                task.due = due.strftime("%Y%m%d")
+
+            except (ValueError, TypeError):
+                pass
+
+        task.synced = False
+
     def _updateOrder(self):
         for index, task in enumerate(self.tasks):
             task.order = index

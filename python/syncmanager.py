@@ -96,6 +96,8 @@ class SyncManager:
                     "summary": task.get("summary", ""),
                     "level": task.get("level", 0),
                     "duration": task.get("duration", 1),
+                    "dtstart": task.get("dtstart", ""),
+                    "due": task.get("due", ""),
                     "wbs": task.get("wbs", ""),
                     "parent": task.get("parent", ""),
                     "order": task.get("order", -1)

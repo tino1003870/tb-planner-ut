@@ -34,6 +34,12 @@ class PlannerBackend:
     def setTaskTitle(self, index, title):
         self.taskModel.setTaskTitle(index, title)
 
+    def setTaskStartDate(self, index, dtstart):
+        self.taskModel.setTaskStartDate(index, dtstart)
+
+    def setTaskDuration(self, index, duration):
+        self.taskModel.setTaskDuration(index, duration)
+
     def moveTaskUp(self, index):
         self.taskModel.moveTaskUp(index)
 
@@ -100,11 +106,30 @@ class PlannerBackend:
     # ---------------------------------------------------------
 
     def buildSyncRequest(self, calendarUrl, username, password):
+        tasks = self.taskModel.taskArray()
+
+        print("===== DEBUG SYNC REQUEST =====", flush=True)
+
+        for i, task in enumerate(tasks):
+            print(
+                "SYNC LOCAL:",
+                "index=", i,
+                "uid=", repr(task.get("uid")),
+                "title=", repr(task.get("summary")),
+                "duration=", repr(task.get("duration")),
+                "dtstart=", repr(task.get("dtstart")),
+                "due=", repr(task.get("due")),
+                "synced=", repr(task.get("synced")),
+                flush=True
+            )
+
+        print("===== END DEBUG SYNC REQUEST =====", flush=True)
+
         return self.syncManager.build_sync_request(
             calendarUrl,
             username,
             password,
-            self.taskModel.taskArray()
+            tasks
         )
 
     def buildListRequest(self, calendarUrl, username, password):
@@ -127,6 +152,13 @@ class PlannerBackend:
             username,
             password
         )
+
+        print("===== DEBUG PLANNER REQUEST =====", flush=True)
+        print(
+            json.dumps(request, ensure_ascii=False, indent=2),
+            flush=True
+        )
+        print("===== END DEBUG PLANNER REQUEST =====", flush=True)
 
         planner_script = (
             Path(__file__).resolve().parent / "planner.py"
@@ -286,6 +318,16 @@ def setTaskTitle(index, title):
     return _backend.taskModel.taskArray()
 
 
+def setTaskStartDate(index, dtstart):
+    _backend.setTaskStartDate(index, dtstart)
+    return _backend.taskModel.taskArray()
+
+
+def setTaskDuration(index, duration):
+    _backend.setTaskDuration(index, duration)
+    return _backend.taskModel.taskArray()
+
+
 def moveTaskUp(index):
     _backend.moveTaskUp(index)
     return _backend.taskModel.taskArray()
@@ -346,11 +388,33 @@ def loadWebDeTasks(calendar_url, username, password):
         flush=True
     )
 
+    print("===== SERVER TASK DATEN =====", flush=True)
+    for t in tasks:
+        print(
+            "SERVER:",
+            "uid=", repr(t.uid),
+            "title=", repr(t.summary),
+            "dtstart=", repr(t.dtstart),
+            "due=", repr(t.due),
+            flush=True
+        )
+    print("===== END SERVER TASK DATEN =====", flush=True)
+
     result = []
 
     for task in tasks:
         wbs = task.wbs or ""
         level = wbs.count(".") if wbs else 0
+
+        # Ungültige Server-Daten wie "0" abfangen.
+        dtstart = task.dtstart or ""
+        due = task.due or ""
+
+        if dtstart == "0":
+            dtstart = ""
+
+        if due == "0":
+            due = ""
 
         result.append({
             "title": task.summary or "",
@@ -361,19 +425,45 @@ def loadWebDeTasks(calendar_url, username, password):
             "wbs": wbs,
             "parent": task.parent or "",
             "taskOrder": task.order if task.order is not None else -1,
-            "dtstart": task.dtstart or "",
-            "due": task.due or ""
+            "dtstart": dtstart,
+            "due": due
         })
 
-        print(
-            "Python loadWebDeTasks TASK:",
-            "title=", repr(task.summary),
-            "dtstart=", repr(task.dtstart),
-            "due=", repr(task.due),
-            "wbs=", repr(wbs),
-            "order=", task.order,
-            flush=True
-        )
+    # Frühestes gültiges Startdatum aller Tasks bestimmen.
+    valid_dates = [
+        task["dtstart"]
+        for task in result
+        if task["dtstart"]
+    ]
+
+    minimum_date = min(valid_dates) if valid_dates else ""
+
+    # Fehlende/ungültige Startdaten auf das früheste Datum setzen
+    # und anschließend die Dauer aus Start- und Enddatum berechnen.
+    for task in result:
+        if not task["dtstart"]:
+            task["dtstart"] = minimum_date
+
+        if task["due"] and task["dtstart"]:
+            try:
+                from datetime import datetime
+
+                start_date = datetime.strptime(
+                    task["dtstart"], "%Y%m%d"
+                )
+                due_date = datetime.strptime(
+                    task["due"], "%Y%m%d"
+                )
+
+                duration = (due_date - start_date).days + 1
+
+                if duration < 1:
+                    duration = 1
+
+                task["duration"] = duration
+
+            except (ValueError, TypeError):
+                task["duration"] = 1
 
     print(
         "Python loadWebDeTasks: result ->",

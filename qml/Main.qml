@@ -1,5 +1,6 @@
 import QtQuick 2.7
 import Lomiri.Components 1.3
+import Lomiri.Components.Pickers 1.3
 import QtQuick.Layouts 1.3
 import io.thp.pyotherside 1.5
 
@@ -10,6 +11,45 @@ MainView {
 
     property bool taskSyncRunning: false
     property string selectedTaskUid: ""
+    property date selectedTaskStartDate: new Date()
+
+    function taskDateToDate(value) {
+        if (!value || value.length !== 8)
+            return null
+
+        var y = parseInt(value.substring(0, 4))
+        var m = parseInt(value.substring(4, 6)) - 1
+        var d = parseInt(value.substring(6, 8))
+
+        return new Date(y, m, d)
+    }
+
+    function dateToTaskDate(value) {
+        if (!value)
+            return ""
+
+        var y = value.getFullYear()
+        var m = value.getMonth() + 1
+        var d = value.getDate()
+
+        return String(y) +
+               (m < 10 ? "0" : "") + m +
+               (d < 10 ? "0" : "") + d
+    }
+
+    function formatTaskDate(value) {
+        if (!value)
+            return ""
+
+        var d = value.getDate()
+        var m = value.getMonth() + 1
+
+        return (d < 10 ? "0" : "") + d +
+               "." +
+               (m < 10 ? "0" : "") + m +
+               "." +
+               value.getFullYear()
+    }
 
     ListModel {
         id: pythonTaskModel
@@ -546,6 +586,31 @@ width: parent.width
                                         taskList.currentIndex = index
                                         root.selectedTaskUid = uid
                                         selectedTaskTitle.text = title
+                                        selectedTaskDuration.text =
+                                            duration.toString()
+
+                                        var selectedTask =
+                                            pythonTaskModel.get(index)
+
+                                        var selectedDate =
+                                            root.taskDateToDate(
+                                                selectedTask.dtstart
+                                            )
+
+                                        if (selectedDate)
+                                            root.selectedTaskStartDate =
+                                                selectedDate
+                                        else
+                                            root.selectedTaskStartDate =
+                                                new Date()
+
+                                        startDateButton.date =
+                                            root.selectedTaskStartDate
+
+                                        startDateButton.text =
+                                            root.formatTaskDate(
+                                                root.selectedTaskStartDate
+                                            )
 
                                         console.log(
                                             "TASK SELECTED:",
@@ -711,6 +776,174 @@ width: parent.width
                                         }
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: units.gu(5)
+
+                        spacing: units.gu(1)
+
+                        Label {
+                            width: units.gu(11)
+                            height: parent.height
+
+                            text: "Startdatum:"
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Button {
+                            id: startDateButton
+
+                            width: parent.width - units.gu(12)
+                            height: units.gu(5)
+
+                            text: "Datum auswählen"
+
+                            enabled:
+                                !root.taskSyncRunning &&
+                                taskList.currentIndex >= 0
+
+                            onClicked: {
+                                PickerPanel.openDatePicker(
+                                    startDateButton,
+                                    "date",
+                                    "Years|Months|Days"
+                                )
+                            }
+
+                            property date date: new Date()
+
+                            onDateChanged: {
+                                root.selectedTaskStartDate = date
+                                text =
+                                    root.formatTaskDate(date)
+                            }
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: units.gu(5)
+
+                        spacing: units.gu(1)
+
+                        Label {
+                            width: units.gu(11)
+                            height: parent.height
+
+                            text: "Dauer:"
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        TextField {
+                            id: selectedTaskDuration
+
+                            width: parent.width - units.gu(18)
+                            height: units.gu(5)
+
+                            text: "1"
+
+                            inputMethodHints:
+                                Qt.ImhDigitsOnly
+
+                            enabled:
+                                !root.taskSyncRunning &&
+                                taskList.currentIndex >= 0
+                        }
+
+                        Label {
+                            width: units.gu(5)
+                            height: parent.height
+
+                            text: "Tage"
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: units.gu(5)
+
+                        spacing: units.gu(1)
+
+                        Button {
+                            id: durationButton
+
+                            width: parent.width
+                            height: units.gu(5)
+
+                            text: "Dauer setzen"
+
+                            enabled:
+                                !root.taskSyncRunning &&
+                                taskList.currentIndex >= 0
+
+                            onClicked: {
+                                var duration =
+                                    parseInt(selectedTaskDuration.text)
+
+                                if (isNaN(duration) || duration < 1)
+                                    duration = 1
+
+                                selectedTaskDuration.text =
+                                    duration.toString()
+
+                                python.call(
+                                    "backend.setTaskDuration",
+                                    [
+                                        taskList.currentIndex,
+                                        duration
+                                    ],
+                                    function() {
+                                        durationButton.text =
+                                            "Dauer gesetzt: " +
+                                            duration + " Tage"
+
+                                        root.refreshPythonTaskModel()
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: units.gu(5)
+
+                        spacing: units.gu(1)
+
+                        Button {
+                            width: parent.width
+                            height: units.gu(5)
+
+                            text: "Startdatum setzen"
+
+                            enabled:
+                                !root.taskSyncRunning &&
+                                taskList.currentIndex >= 0
+
+                            onClicked: {
+                                python.call(
+                                    "backend.setTaskStartDate",
+                                    [
+                                        taskList.currentIndex,
+                                        root.dateToTaskDate(
+                                            root.selectedTaskStartDate
+                                        )
+                                    ],
+                                    function() {
+                                        startDateButton.text =
+                                            "Gesetzt: " +
+                                            root.formatTaskDate(
+                                                root.selectedTaskStartDate
+                                            )
+
+                                        root.refreshPythonTaskModel()
+                                    }
+                                )
                             }
                         }
                     }
