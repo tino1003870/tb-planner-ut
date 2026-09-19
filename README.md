@@ -1,4 +1,6 @@
 # TB Planner UT
+![TB Planner Ubuntu Touch](docs/tb-planner-ut.png)
+
 
 TB Planner UT is the Ubuntu Touch version of **TB Planner**, a hierarchical
 WBS/Gantt project planning application.
